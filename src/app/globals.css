@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-zinc-50 text-zinc-900 antialiased;
+}
+
+/* Slider de avance */
+input[type="range"] {
+  @apply h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-200 accent-emerald-600;
+}
