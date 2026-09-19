@@ -2,6 +2,81 @@
 
 :root {
   color-scheme: light;
+
+  /*
+   * Escala secuencial del avance (0 % → 100 %).
+   *
+   * Un solo tono, azul, claro→oscuro. Azul y no verde porque emerald ya es el
+   * color de estado de la app (badges, deltas): usar el mismo tono para magnitud
+   * dejaría un verde intermedio ambiguo entre "a medio hacer" y "OK".
+   *
+   * Validado sobre la superficie real de las cards (#ffffff): monotónica en
+   * luminosidad (L 0.905 → 0.338), paso mínimo ΔL 0.093, y el contraste crece
+   * con el avance (1.32:1 → 11.95:1). Los dos primeros pasos quedan bajo 3:1,
+   * que es lo esperado en una escala secuencial: el paso más claro significa
+   * "casi cero" y se repliega hacia el fondo. Por eso cada banda lleva contorno
+   * y el número siempre está disponible en el detalle.
+   */
+  --avance-0: #cde2fb;
+  --avance-1: #86b6ef;
+  --avance-2: #5598e7;
+  --avance-3: #2a78d6;
+  --avance-4: #1c5cab;
+  --avance-5: #0d366b;
+  --avance-sin-dato: #e1e0d9;
+  --avance-contorno: rgba(11, 11, 11, 0.16);
+  --avance-tinta-clara: #0b0b0b;
+  --avance-tinta-oscura: #ffffff;
+
+  --viz-grilla: #e1e0d9;
+  --viz-eje: #c3c2b7;
+  --viz-tinta-suave: #898781;
+}
+
+/*
+ * Modo oscuro: NO es la rampa clara dada vuelta, son pasos elegidos para la
+ * superficie oscura. El invariante que se conserva es el mismo en los dos modos
+ * —más avance, más contraste contra el fondo—, que acá va de oscuro a claro.
+ * Validado sobre #1a1a19: monotónica (L 0.338 → 0.812), paso mínimo ΔL 0.095.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --avance-0: #0d366b;
+    --avance-1: #184f95;
+    --avance-2: #256abf;
+    --avance-3: #3987e5;
+    --avance-4: #6da7ec;
+    --avance-5: #9ec5f4;
+    --avance-sin-dato: #2c2c2a;
+    --avance-contorno: rgba(255, 255, 255, 0.18);
+    --avance-tinta-clara: #ffffff;
+    --avance-tinta-oscura: #0b0b0b;
+
+    --viz-grilla: #2c2c2a;
+    --viz-eje: #383835;
+    --viz-tinta-suave: #898781;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --avance-0: #0d366b;
+  --avance-1: #184f95;
+  --avance-2: #256abf;
+  --avance-3: #3987e5;
+  --avance-4: #6da7ec;
+  --avance-5: #9ec5f4;
+  --avance-sin-dato: #2c2c2a;
+  --avance-contorno: rgba(255, 255, 255, 0.18);
+  --avance-tinta-clara: #ffffff;
+  --avance-tinta-oscura: #0b0b0b;
+
+  --viz-grilla: #2c2c2a;
+  --viz-eje: #383835;
+  --viz-tinta-suave: #898781;
 }
 
 body {

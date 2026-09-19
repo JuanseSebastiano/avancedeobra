@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { SIN_DATO, type GrillaData, type Zona } from "@/lib/types";
+import { SIN_DATO, type GrillaData, type Nivel, type Zona } from "@/lib/types";
+import { CorteAvance, type DatoNivel } from "@/components/corte";
+import { promedioPonderado } from "@/lib/formato";
 import { guardarLote } from "./actions";
 import { borrarBorrador, guardarBorrador, hace, leerBorrador } from "./borrador";
 import {
@@ -29,6 +31,7 @@ import {
 interface Props {
   obraId: string;
   zonas: Zona[];
+  niveles: Nivel[];
   inicial: GrillaData;
   editable: boolean;
 }
@@ -41,7 +44,7 @@ type EstadoGuardado =
 /** El 92,5 % de las celdas reales son exactamente 0 % o 100 %: una tecla cada una. */
 const ATAJOS: Record<string, number> = { "0": 0, "1": 100 };
 
-export function Grilla({ obraId, zonas, inicial, editable }: Props) {
+export function Grilla({ obraId, zonas, niveles, inicial, editable }: Props) {
   const [data, setData] = useState<GrillaData>(inicial);
   const [zonaId, setZonaId] = useState(inicial.zonaId);
   const [cargando, setCargando] = useState(false);
@@ -79,6 +82,50 @@ export function Grilla({ obraId, zonas, inicial, editable }: Props) {
   const ctx: Contexto = useMemo(
     () => ({ filasVisibles, ancho, alto: filasVisibles.length }),
     [filasVisibles, ancho]
+  );
+
+  /**
+   * Avance por nivel calculado sobre lo que hay en pantalla, incluyendo lo que
+   * todavía no se guardó. Es lo que hace que el mini-corte se llene mientras se
+   * carga, y de paso muestra qué pisos de la zona siguen vacíos — la pregunta
+   * que la pantalla anterior, de a un piso por vez, no podía responder.
+   */
+  const datosCorte: DatoNivel[] = useMemo(() => {
+    const porNivel = new Map<string, { porcentaje: number; monto: number }[]>();
+    for (const filaPlana of filasVisibles) {
+      const fila = data.filas[filaPlana];
+      data.pisos.forEach((piso, c) => {
+        if (!piso.nivelCodigo) return;
+        const valor = g.valores[indicePlano(filaPlana, c, ancho)];
+        if (valor === SIN_DATO) return;
+        const lista = porNivel.get(piso.nivelCodigo) ?? [];
+        lista.push({ porcentaje: valor / 100, monto: fila.monto });
+        porNivel.set(piso.nivelCodigo, lista);
+      });
+    }
+    return niveles.map((n) => {
+      const valores = porNivel.get(n.codigo);
+      return {
+        codigo: n.codigo,
+        porcentaje: valores ? promedioPonderado(valores) : null,
+        celdas: valores?.length ?? 0,
+      };
+    });
+  }, [filasVisibles, data.filas, data.pisos, g.valores, ancho, niveles]);
+
+  /** Click en una banda del corte: llevar la grilla a la columna de ese piso. */
+  const irANivel = useCallback(
+    (codigoNivel: string) => {
+      const c = data.pisos.findIndex((p) => p.nivelCodigo === codigoNivel);
+      if (c < 0) return;
+      dispatch({ tipo: "foco", celda: { f: 0, c }, extender: false });
+      const celda = contenedor.current?.querySelector<HTMLElement>(
+        `[data-col="${c}"]`
+      );
+      celda?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      contenedor.current?.focus();
+    },
+    [data.pisos]
   );
 
   const fecha = data.corte?.fecha ?? null;
@@ -332,6 +379,7 @@ export function Grilla({ obraId, zonas, inicial, editable }: Props) {
         </Nota>
       )}
 
+      <div className="flex gap-3">
       <div
         ref={contenedor}
         tabIndex={0}
@@ -374,6 +422,21 @@ export function Grilla({ obraId, zonas, inicial, editable }: Props) {
             dispatch({ tipo: "foco", celda: { f, c }, extender: true });
           }}
         />
+      </div>
+
+      {niveles.length > 0 && (
+        <aside className="hidden shrink-0 lg:block">
+          <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            Zona en el corte
+          </p>
+          <CorteAvance
+            niveles={niveles}
+            datos={datosCorte}
+            variante="mini"
+            onSelect={irANivel}
+          />
+        </aside>
+      )}
       </div>
 
       <BarraAcciones
@@ -480,6 +543,7 @@ function Tabla({
                   return (
                     <td
                       key={piso.id}
+                      data-col={c}
                       aria-selected={esActiva || enRango}
                       onPointerDown={(e) => {
                         e.preventDefault();

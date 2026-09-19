@@ -166,3 +166,13 @@ export interface GrillaData {
 }
 
 export const SIN_DATO = -1;
+
+/** Una celda de avance_rubro_nivel(): el cruce de un rubro con un nivel. */
+export interface AvanceRubroNivel {
+  rubro: string;
+  codigo: string;
+  orden: number;
+  porcentaje: number | null;
+  porcentaje_simple: number | null;
+  celdas: number;
+}

@@ -421,3 +421,50 @@ as $$
   join public.pisos p on p.id = u.piso_id
   where p_zona is null or p.zona_id = p_zona;
 $$;
+
+-- Avance por rubro y nivel: la vista que responde "dónde está frenado cada
+-- contratista", que el total por nivel no puede mostrar. El rubro se agrupa por
+-- NOMBRE porque cuelga de zona: "Albañilería" son seis filas distintas.
+create or replace function public.avance_rubro_nivel(
+  p_obra  uuid,
+  p_fecha date default null,
+  p_zona  uuid default null
+)
+returns table (
+  rubro             text,
+  codigo            text,
+  orden             integer,
+  porcentaje        numeric,
+  porcentaje_simple numeric,
+  celdas            bigint
+)
+language sql stable
+as $$
+  with ultimos as (
+    select distinct on (a.item_id, a.piso_id)
+      a.item_id, a.piso_id, a.porcentaje
+    from public.avances a
+    where a.obra_id = p_obra
+      and (p_fecha is null or a.fecha_corte <= p_fecha)
+    order by a.item_id, a.piso_id, a.fecha_corte desc, a.created_at desc
+  )
+  select
+    r.nombre,
+    n.codigo,
+    n.orden,
+    case
+      when sum(i.monto) > 0 then round(sum(u.porcentaje * i.monto) / sum(i.monto), 4)
+      else round(avg(u.porcentaje), 4)
+    end,
+    round(avg(u.porcentaje), 4),
+    count(*)
+  from ultimos u
+  join public.items     i  on i.id = u.item_id and i.activo
+  join public.subrubros s  on s.id = i.subrubro_id
+  join public.rubros    r  on r.id = s.rubro_id
+  join public.pisos     pi on pi.id = u.piso_id
+  join public.niveles   n  on n.id = pi.nivel_id
+  where p_zona is null or r.zona_id = p_zona
+  group by r.nombre, n.codigo, n.orden
+  order by r.nombre, n.orden;
+$$;

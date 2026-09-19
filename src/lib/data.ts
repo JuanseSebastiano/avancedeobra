@@ -4,6 +4,7 @@ import type {
   AvanceActual,
   AvanceNivel,
   AvanceNivelSerie,
+  AvanceRubroNivel,
   Corte,
   ItemRow,
   Nivel,
@@ -174,17 +175,25 @@ export async function getAvancePorNivelSerie(
   }));
 }
 
-/** Promedio ponderado por monto; si no hay montos (peso 0), promedio simple. */
-export function promedioPonderado(valores: { porcentaje: number; monto: number }[]): number | null {
-  if (valores.length === 0) return null;
-  const pesoTotal = valores.reduce((s, v) => s + v.monto, 0);
-  if (pesoTotal > 0) {
-    return valores.reduce((s, v) => s + v.porcentaje * v.monto, 0) / pesoTotal;
-  }
-  return valores.reduce((s, v) => s + v.porcentaje, 0) / valores.length;
-}
+// Re-export para no romper los imports existentes desde "@/lib/data".
+export { promedioPonderado, formatPct } from "@/lib/formato";
 
-export function formatPct(v: number | null | undefined): string {
-  if (v === null || v === undefined) return "—";
-  return `${(v * 100).toFixed(1).replace(/\.0$/, "")}%`;
+/** Avance cruzado rubro × nivel, para el heatmap. */
+export async function getAvanceRubroNivel(
+  supabase: SupabaseClient,
+  obraId: string,
+  filtro: { fecha?: string | null; zonaId?: string | null } = {}
+): Promise<AvanceRubroNivel[]> {
+  const { data, error } = await supabase.rpc("avance_rubro_nivel", {
+    p_obra: obraId,
+    p_fecha: filtro.fecha ?? null,
+    p_zona: filtro.zonaId ?? null,
+  });
+  if (error) throw new Error(`Error leyendo avance por rubro y nivel: ${error.message}`);
+  return ((data ?? []) as AvanceRubroNivel[]).map((r) => ({
+    ...r,
+    porcentaje: r.porcentaje === null ? null : Number(r.porcentaje),
+    porcentaje_simple: r.porcentaje_simple === null ? null : Number(r.porcentaje_simple),
+    celdas: Number(r.celdas ?? 0),
+  }));
 }

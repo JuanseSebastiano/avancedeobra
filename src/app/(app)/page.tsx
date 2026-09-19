@@ -2,6 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   formatPct,
+  getAvancePorNivel,
+  getAvancePorNivelSerie,
+  getAvanceRubroNivel,
   getAvancesActuales,
   getCatalogo,
   getSesion,
@@ -10,6 +13,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarrasAvance, CurvaAvance } from "@/components/charts";
+import { CortePanel } from "./corte-panel";
+import { HeatmapRubroNivel } from "@/components/heatmap";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +42,13 @@ export default async function DashboardPage({ searchParams }: Props) {
   const responsableSel = params.responsable || null;
   const rubroNombreSel = params.rubro || null;
 
-  const [avances, curvaRes, estancadosRes] = await Promise.all([
+  const filtroNivel = {
+    zonaId: zonaSel?.id ?? null,
+    rubroNombre: rubroNombreSel,
+  };
+
+  const [avances, curvaRes, estancadosRes, avancePorNivel, serieNivel, rubroNivel] =
+    await Promise.all([
     getAvancesActuales(sesion.supabase, sesion.obra.id),
     sesion.supabase.rpc("curva_avance", {
       p_obra: sesion.obra.id,
@@ -47,7 +58,10 @@ export default async function DashboardPage({ searchParams }: Props) {
       p_obra: sesion.obra.id,
       p_meses: MESES_ESTANCADO,
     }),
-  ]);
+    getAvancePorNivel(sesion.supabase, sesion.obra.id, filtroNivel),
+    getAvancePorNivelSerie(sesion.supabase, sesion.obra.id, filtroNivel),
+    getAvanceRubroNivel(sesion.supabase, sesion.obra.id, { zonaId: zonaSel?.id ?? null }),
+    ]);
   if (curvaRes.error) throw new Error(curvaRes.error.message);
   if (estancadosRes.error) throw new Error(estancadosRes.error.message);
 
@@ -203,6 +217,31 @@ export default async function DashboardPage({ searchParams }: Props) {
           ))}
       </div>
 
+      {/* Corte del edificio */}
+      {catalogo.niveles.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Avance por nivel
+              {zonaSel ? ` — ${zonaSel.nombre}` : ""}
+              {rubroNombreSel ? ` · ${rubroNombreSel}` : ""}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CortePanel
+              niveles={catalogo.niveles.map((n) => ({
+                codigo: n.codigo,
+                nombre: n.nombre,
+                orden: n.orden,
+                grupo: n.grupo,
+              }))}
+              actual={avancePorNivel}
+              serie={serieNivel}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Avance por zona */}
       {!zonaSel && porZona.length > 0 && (
         <Card>
@@ -212,6 +251,25 @@ export default async function DashboardPage({ searchParams }: Props) {
           <CardContent>
             <BarrasAvance
               data={porZona.map((z) => ({ nombre: z.zona.nombre, porcentaje: z.porcentaje ?? 0 }))}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Dónde está frenado cada rubro */}
+      {rubroNivel.length > 0 && catalogo.niveles.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Avance por rubro y nivel {zonaSel ? `— ${zonaSel.nombre}` : ""}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <HeatmapRubroNivel
+              datos={rubroNivel}
+              niveles={catalogo.niveles.map((n) => ({
+                codigo: n.codigo,
+                nombre: n.nombre,
+                orden: n.orden,
+              }))}
             />
           </CardContent>
         </Card>

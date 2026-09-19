@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSesion } from "@/lib/data";
 import { cargarGrilla } from "@/lib/avances/grilla";
-import type { Zona } from "@/lib/types";
+import type { Nivel, Zona } from "@/lib/types";
 import { Grilla } from "./grilla";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +16,15 @@ export default async function CargaPage({
   const sesion = await getSesion();
   if (!sesion) redirect("/login");
 
-  const { data: zonasData, error } = await sesion.supabase
-    .from("zonas")
-    .select("*")
-    .eq("obra_id", sesion.obra.id)
-    .order("orden");
-  if (error) throw new Error(`Error leyendo zonas: ${error.message}`);
+  const [zonasRes, nivelesRes] = await Promise.all([
+    sesion.supabase.from("zonas").select("*").eq("obra_id", sesion.obra.id).order("orden"),
+    sesion.supabase.from("niveles").select("*").eq("obra_id", sesion.obra.id).order("orden"),
+  ]);
+  const error = zonasRes.error ?? nivelesRes.error;
+  if (error) throw new Error(`Error leyendo el catálogo: ${error.message}`);
 
-  const zonas = ((zonasData ?? []) as Zona[]).filter((z) => z.activo);
+  const zonas = ((zonasRes.data ?? []) as Zona[]).filter((z) => z.activo);
+  const niveles = ((nivelesRes.data ?? []) as Nivel[]).filter((n) => n.activo);
 
   if (zonas.length === 0) {
     return (
@@ -56,6 +57,7 @@ export default async function CargaPage({
       <Grilla
         obraId={sesion.obra.id}
         zonas={zonas}
+        niveles={niveles}
         inicial={grilla}
         editable={sesion.rol !== "viewer"}
       />
