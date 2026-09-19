@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ParsedWorkbook } from "@/lib/excel/parse";
+import { insertarAvancesEnLote, type CeldaAvance } from "@/lib/avances/diff";
 
 /**
  * Vuelca un workbook parseado a la DB de forma idempotente:
@@ -132,19 +133,9 @@ export async function importarWorkbook(
   );
   const itemId = new Map(items.map((i) => [`${i.subrubro_id}|${i.descripcion}`, i.id]));
 
-  // 6. Avances: comparar contra el estado actual e insertar solo cambios.
-  const { data: actualesData, error: actualesError } = await supabase
-    .from("avances_actuales")
-    .select("item_id, piso_id, porcentaje")
-    .eq("obra_id", obraId)
-    .limit(50000);
-  if (actualesError) throw new Error(`Error leyendo avances actuales: ${actualesError.message}`);
-  const actual = new Map(
-    (actualesData ?? []).map((a) => [`${a.item_id}|${a.piso_id}`, a.porcentaje as number])
-  );
-
-  const nuevos: Record<string, unknown>[] = [];
-  let sinCambio = 0;
+  // 6. Avances: el diff contra el estado actual vive en src/lib/avances/diff.ts,
+  //    compartido con el guardado en lote de la grilla de carga.
+  const celdas: CeldaAvance[] = [];
   for (const z of parsed.zonas) {
     const zId = zonaId.get(z.codigo)!;
     for (const r of z.rubros) {
@@ -156,30 +147,17 @@ export async function importarWorkbook(
           for (const [pisoCodigo, porcentaje] of Object.entries(it.avances)) {
             const pId = pisoId.get(`${zId}|${pisoCodigo}`);
             if (!pId) continue;
-            const previo = actual.get(`${iId}|${pId}`);
-            if (previo !== undefined && Math.abs(previo - porcentaje) < 1e-6) {
-              sinCambio++;
-              continue;
-            }
-            nuevos.push({
-              obra_id: obraId,
-              item_id: iId,
-              piso_id: pId,
-              porcentaje,
-              porcentaje_anterior: previo ?? null,
-              fecha_corte: opts.fechaCorte,
-              usuario_id: opts.usuarioId,
-            });
+            celdas.push({ itemId: iId, pisoId: pId, porcentaje });
           }
         }
       }
     }
   }
 
-  for (let i = 0; i < nuevos.length; i += 1000) {
-    const { error } = await supabase.from("avances").insert(nuevos.slice(i, i + 1000));
-    if (error) throw new Error(`Error insertando avances: ${error.message}`);
-  }
+  const { insertados, sinCambio } = await insertarAvancesEnLote(supabase, obraId, celdas, {
+    fechaCorte: opts.fechaCorte,
+    usuarioId: opts.usuarioId,
+  });
 
   return {
     zonas: zonas.length,
@@ -187,7 +165,7 @@ export async function importarWorkbook(
     rubros: rubros.length,
     subrubros: subrubros.length,
     items: items.length,
-    avancesInsertados: nuevos.length,
+    avancesInsertados: insertados,
     avancesSinCambio: sinCambio,
     fechaCorte: opts.fechaCorte,
   };
